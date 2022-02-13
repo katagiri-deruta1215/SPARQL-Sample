@@ -1,0 +1,230 @@
+<html>
+<head jang="ja">
+<meta charset="UTF-8">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.2.7/cytoscape.min.js"></script>
+
+<!-- for 'layout: "dagre"' -->
+<script src="https://unpkg.com/klayjs@0.4.1/klay.js"></script>
+		<script src="cytoscape-klay.js"></script>
+<script type="text/javascript" src="sparql.js" charset="UTF-8"></script>
+<style>
+#cy {
+  width: 100%;  /* MUST */
+  height: 100%;  /* MUST */
+
+  /**
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 999;
+  */
+}
+</style>
+</head>
+<body>
+<div id="cy"></div>
+
+<script>
+var param = getParameter();
+
+	//SPARQLエンドポイントの初期設定
+	 var endpoint = "http://kg.hozo.jp/fuseki/kgrc/sparql";
+     var novel = "http://kgc.knowledge-graph.jp/data/SilverBlaze";
+     
+     
+     if(param["novel"]!=undefined){
+      alert(param["novel"]);
+      novel=param["novel"];}
+	//SPARQLクエリの初期設定
+	var query ="PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>PREFIX kgc: <http://kgc.knowledge-graph.jp/ontology/kgc.owl#>"+
+	'SELECT DISTINCT * FROM <'+novel+'>WHERE {  ?s rdf:type/rdfs:subClassOf kgc:Scene .  ?o rdf:type/rdfs:subClassOf kgc:Scene .  ?s ?p ?o .  ?s kgc:source ?st.  ?o kgc:source ?ot.  FILTER(lang(?st)="ja")  FILTER(lang(?ot)="ja")}';
+	
+	//SPARQLクエリの実行（sparql.jsで定義している関数を利用）
+		qr = sendQuery(endpoint, query);
+		
+		qr.fail(//クエリが失敗したときの処理
+			function (xhr, textStatus, thrownError) {
+				alert("Error: A '" + textStatus+ "' occurred.");
+			}
+		);
+		qr.done(//クエリが成功したときの処理
+			function (d) {
+				cs_data = getCSdata(d.results.bindings);
+				showCS(cs_data);
+			}
+		);
+
+//SPARQLの結果からCytoScape用のデータを作成する【<指定した主語> ?p ?o】用
+function getCSdata(data){	
+	console.log(JSON.stringify(data));
+	
+	var test1_nodes = new Array();			
+	var test_nodes = new Array(6);
+	var test_edges = new Array(5);
+	for(var i=0 ; i < data.length ; i++){
+	
+		var nid = data[i]["s"].value;
+		var subj = data[i]["st"].value;
+		subj = subj.substr(0,5)+'\n'+subj.substr(5,5)+'\n'+subj.substr(10,5)+'\n'+subj.substr(15,5)+'\n'+subj.substr(20,5)+'\n'+subj.substr(25,5)+'\n'+subj.substr(30);
+		var oid = data[i]["o"].value;
+		var obj = data[i]["ot"].value;
+		var obj = obj.substr(0,5)+'\n'+obj.substr(5,5)+'\n'+obj.substr(10,5)+'\n'+obj.substr(15,5)+'\n'+obj.substr(20,5)+'\n'+obj.substr(25,5)+'\n'+obj.substr(30);
+		//console.log(subj);
+    	test1_nodes.push(  { "data": { "id": nid, "name": subj,"href": nid }, classes:'multiline-manual'});
+    	test1_nodes.push(  { "data": { "id": oid,"name": obj,"href": oid }, classes: 'multiline-manual' });
+        test_edges.push(  { "data": { "source": nid , "target": oid } });
+	}
+	var cs1_data = {"nodes":test1_nodes, "edges":test_edges };
+	
+	//cy.on('tap', 'node', function(){   try {  window.open( this.data('href') );   } catch(e){  window.location.href = this.data('href');   } });
+	
+	return cs1_data ;
+}
+
+//データをCytoScapeで表示する関数
+function showCS(cs1_data){
+	var cy = window.cy = cytoscape({
+	  container: document.getElementById('cy'),
+
+	  boxSelectionEnabled: false,
+	  autounselectify: true,
+
+	  layout: {
+	    name: 'klay'
+	  },
+	  style: [
+	    {
+	      selector: 'node',
+	      style: {
+	        'content': 'data(name)',  /* must be specified if you want to display the node text */
+	        'text-opacity': 0.5,
+	        //'text-valign': 'multiline',
+	        //'text-halign': 'auto',
+	       // 'text-wrap': 'wrap',
+	        //'text-max-width': 80 ,
+	        'background-color': '#11479e'
+	      }
+	    },
+	    {
+	      selector: '.eating',
+	      style:{
+	         'border-color': 'red'
+	         }
+	    },
+	     {
+	      selector: '.eater',
+	      style:{
+	         'border-width': 9
+	         }
+	    },
+	    {
+	      selector: 'edge',
+	      style: {
+	        'target-arrow-shape': 'triangle',
+	        'curve-style': 'bezier',
+	        'target-arrow-color': '#9dbaea',
+	        'width': 4,
+	        'line-color': '#9dbaea',
+	      }
+	    },
+	    {"selector": "node[label]",
+    "style": {
+      "label": "data(label)"
+    }
+  },
+  
+  {
+    "selector": "edge[label]",
+    "style": {
+      "label": "data(label)",
+      "width": 3
+    }
+  },
+{
+    "selector": ".multiline-manual",
+    "style": {
+      "text-wrap": "wrap"
+    }
+  },
+	  ],
+	  elements: cs1_data
+	});
+	cy.on('tap', 'node', function(){  
+	 try {  window.open( this.data('href') );   } catch(e){  window.location.href = this.data('href');   } });
+	/** var nodes = this;
+  var tapped = nodes;
+  var food = [];
+
+  nodes.addClass('eater');
+
+  for(;;){
+    var connectedEdges = nodes.connectedEdges(function(el){
+      return !el.target().anySame( nodes );
+    });
+
+    var connectedNodes = connectedEdges.targets();
+
+    Array.prototype.push.apply( food, connectedNodes );
+
+    nodes = connectedNodes;
+
+    if( nodes.empty() ){ break; }
+  }
+
+  var delay = 0;
+  var duration = 500;
+  for( var i = food.length - 1; i >= 0; i-- ){ (function(){
+    var thisFood = food[i];
+    var eater = thisFood.connectedEdges(function(el){
+      return el.target().same(thisFood);
+    }).source();
+
+    thisFood.delay( delay, function(){
+      eater.addClass('eating');
+    } ).animate({
+      position: eater.position(),
+      css: {
+        'width': 10,
+        'height': 10,
+        'border-width': 0,
+        'opacity': 0
+      }
+    }, {
+      duration: duration,
+      complete: function(){
+        thisFood.remove();
+      }
+    });
+
+    delay += duration;
+  })(); } // for
+
+}); // on tap*/
+	
+}
+function getParameter()
+{
+    var result = {};
+    if( 1 < window.location.search.length )
+    {
+        var query = window.location.search.substring( 1 );
+
+        var parameters = query.split( '&' );
+
+        for( var i = 0; i < parameters.length; i++ )
+        {
+            var element = parameters[ i ].split( '=' );
+
+            var paramName = decodeURIComponent( element[ 0 ] );
+            var paramValue = decodeURIComponent( element[ 1 ] );
+
+            result[ paramName ] = paramValue;
+        }
+    }
+    return result;
+}
+</script>
+
+</body>
+</html>
